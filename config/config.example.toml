@@ -98,3 +98,13 @@ temperature = 0.0                          # Controls randomness for vision mode
 # MCP (Model Context Protocol) configuration
 [mcp]
 server_reference = "app.mcp.server" # default server module reference
+
+# Add database configuration section
+[database]
+# Default database configuration
+host = "localhost"
+port = 3306
+user = ""
+password = ""
+database = "moviecommunity"
+charset = "utf8mb4"
