@@ -110,7 +110,226 @@ class DictionaryManus(Manus):
 ```
 #### 查询结果示例
 ![Pasted image 20250413152946](attachments/Pasted image 20250413152946.png)
+
+## 问题四
+
+### 1. OpenManus中，Next Plan是怎么获得的，对应的输入和输出分别是什么？请举例说明
+
+#### Next Plan 实现说明
+
+##### Next Plan的基本概念
+
+在OpenManus框架中，Next Plan是在执行Initial Plan后，根据执行结果和当前状态动态生成的后续计划。它允许代理根据前一步执行的结果来调整后续的行动，实现更灵活、智能的任务执行流程。
+
+##### Next Plan的输入和输出
+
+**输入：**
+
+- 用户的原始查询/目标
+- 已执行步骤的详细信息和结果（执行历史）
+- 当前任务的上下文和状态
+- 可用的函数/工具列表
+
+**输出：**
+
+- 包含推理过程的说明
+- 下一步操作的详细计划（包括要调用的函数及其参数）
+- 可能的后续步骤预计
+
+##### Next Plan的获取流程
+
+1. 系统执行完当前计划的一步后，收集执行结果和当前状态
+2. 构建包含执行历史、当前状态和可用工具的提示信息
+3. 调用大语言模型(LLM)来分析当前情况并决定下一步行动
+4. 解析LLM返回的JSON格式计划
+5. 执行新计划，然后重复此过程
+
+##### 代码实现细节
+
+我们在`EnhancedManus`类中实现了Next Plan功能：
+
+- `get_next_plan()`: 核心方法，负责基于执行历史和当前状态生成下一步计划
+- `run_with_next_plan()`: 使用Next Plan功能执行完整的用户请求
+- `_extract_json_object()`: 辅助方法，从LLM响应中提取JSON格式的计划
+- `execute_step()`: 执行单个步骤并收集结果
+
+### 2. 请修改OpenManus代码，实现完整的本地数据分析功能
+
+#### 本地数据分析功能实现
+
+##### 数据模型理解
+
+我们的系统基于一个学习词汇的应用程序，包含以下主要集合：
+
+- **words**: 存储单词信息，包括词性、定义、难度等
+- **word_learning_progress**: 记录用户的单词学习进度
+- **learning_records**: 记录用户的学习活动
+- **learning_goals**: 存储用户设定的
+
+- **user_wordbooks**: 用户创建的词书集合
+- **system_wordbooks**: 系统预设的词书集合
+- **posts**: 用户发布的学习帖子
+
+这些集合之间通过用户ID和单词ID建立关联，形成一个完整的单词学习系统。
+
+##### 分析工具设计
+
+针对上述数据模型，我们设计了6个主要分析工具：
+
+1. **CollectionBasicInfoTool**: 提供数据库集合的基础统计信息，包括文档数量、大小等。
+   - 输入：无需参数
+   - 输出：所有集合的统计信息
+2. **WordStatisticsTool**: 分析单词集合的特征分布。
+   - 输入：language（可选）, tag（可选）
+   - 输出：难度分布、词性分布、标签分布等统计信息
+3. **LearningProgressAnalysisTool**: 分析用户的学习进度。
+   - 输入：user_id, period（可选）
+   - 输出：熟练度分布、复习阶段分布、记忆效果分析等
+4. **UserLearningGoalsTool**: 分析用户的目标完成情况。
+   - 输入：user_id, days（可选）
+   - 输出：目标设置、完成率、每日详情等
+5. **WordbookAnalysisTool**: 分析词书内容和使用情况。
+   - 输入：wordbook_id, is_system（可选）
+   - 输出：词书内容分析、单词分布等
+6. **LearningVisualizationTool**: 生成学习数据可视化图表。
+   - 输入：user_id, chart_type, days（可选）
+   - 输出：生成的图表路径和描述
+
+##### 技术实现细节
+
+###### 数据访问层
+
+我们使用MongoDB作为数据存储，通过PyMongo库访问数据：
+
+```python
+def get_mongo_connection():
+    """获取MongoDB连接"""
+    if username and password:
+        uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource={auth_db}"
+    else:
+        uri = f"mongodb://{host}:{port}/{database}"
+    client = MongoClient(uri)
+    return client
+```
+
+每个工具都通过这个连接访问相应的集合，执行查询和聚合操作。
+
+###### 数据分析逻辑
+
+数据分析主要包括以下几类操作：
+
+1. **基础统计分析**：计算数量、平均值、分布等
+2. **分组聚合分析**：按特定字段（如难度、标签）分组统计
+3. **时间序列分析**：分析随时间变化的学习数据
+4. **关联分析**：分析不同集合间的数据关系（如单词与学习进度）
+
+###### 可视化实现
+
+使用matplotlib和seaborn库实现数据可视化：
+
+```python
+def create_visualization(chart_type, data, options):
+    plt.figure(figsize=(10, 6))
+    
+    if chart_type == "progress_trend":
+        # 绘制学习进度趋势图
+        plt.bar(x, data["new_words"], width=0.4, label='新单词', color='blue')
+        plt.bar([i + 0.4 for i in x], data["review_words"], width=0.4, label='复习单词', color='green')
+    
+    elif chart_type == "proficiency_distribution":
+        # 绘制熟练度分布饼图
+        plt.pie(data["proficiency_counts"], labels=data["proficiency_labels"], autopct='%1.1f%%')
+        
+    # ...更多图表类型...
+    
+    plt.title(options["title"])
+    plt.tight_layout()
+    plt.savefig(options["output_path"])
+    plt.close()
+```
+
+#### 系统集成
+
+##### BiEnhancedManus代理
+
+我们创建了一个特殊的代理类`BiEnhancedManus`，它结合了两个主要功能：
+
+1. 从`EnhancedManus`继承Next Plan能力，实现智能规划执行
+2. 集成了BI分析工具，提供数据分析能力
+
+这样，代理可以根据用户的需求，动态规划分析步骤，并在每一步执行后根据结果调整后续计划。
+
+##### 执行流程
+
+完整的执行流程如下：
+
+1. 用户输入分析需求
+2. 代理生成初始计划并执行第一步
+3. 代理分析执行结果，生成Next Plan
+4. 执行Next Plan中的步骤
+5. 重复步骤3-4，直到任务完成或达到最大步骤数
+6. 返回最终分析结果和洞察
+
+##### 示例场景
+
+**场景1: 分析德语A1级单词**
+
+```
+用户: 分析所有德语A1级别的单词，它们的词性分布如何？
+```
+
+执行流程：
+
+1. 首先使用`collection_basic_info`了解数据库结构
+2. 然后使用`word_statistics`工具，传入参数`language="de", tag="A1"`
+3. 分析结果，生成额外的洞察
+4. 可能使用`learning_visualization`生成词性分布图表
+
+![A1级别单词分析](attachments/A1级别单词分析.png)
+
+**场景2: 分析用户学习进度**
+
+```
+用户: 分析用户"ed62add4-bf40-4246-b7ab-2555015b383b"的学习情况，他的目标完成度如何？
+```
+
+执行流程：
+
+1. 使用`user_learning_goals`工具分析用户的目标设置和完成情况
+2. 使用`learning_progress_analysis`分析用户的学习进度
+3. 结合结果，提供关于用户学习情况的综合分析
+4. 可能使用`learning_visualization`生成学习趋势图表
+
+![ed62add4-bf40-4246-b7ab-2555015b383b_progress_trend_20250413175922](../outputs/ed62add4-bf40-4246-b7ab-2555015b383b_progress_trend_20250413175922.png)
+
+#### 优化与扩展
+
+##### 性能优化
+
+对于大型数据集，我们实现了以下优化：
+
+1. **查询优化**：使用MongoDB的聚合管道在数据库层面完成计算
+2. **数据采样**：对于统计分析，使用采样减少处理数据量
+3. **结果缓存**：对于频繁查询的结果进行缓存
+
+##### 可能的扩展方向
+
+1. **预测分析**：添加基于历史数据的学习效果预测
+2. **推荐系统**：根据学习数据推荐合适的单词和学习计划
+3. **自定义分析**：允许用户定义自己的分析指标和可视化
+4. **批量报告**：生成综合性的学习报告文档
+5. **实时分析**：增加实时数据处理和分析能力
+
+####  总结
+
+本项目成功实现了OpenManus框架的Next Plan功能增强，并基于此开发了一套完整的本地数据分析系统。系统可以根据用户需求动态规划分析步骤，智能调整执行流程，提供深入的数据分析和可视化。
+
+通过将AI代理技术与BI分析能力结合，我们实现了一个智能化的分析助手，不仅能够执行预定义的分析任务，还能理解用户需求、自主规划分析流程，并提供有价值的洞察。
+
+这种结合为传统BI工具带来了新的可能性，使数据分析更加智能化、个性化和对话式，未来可以进一步扩展到更广泛的商业智能领域。
+
 ## 问题五
+
 ### 1. 在AI结合BI的应用场景中，对OpenManus的四大组件：Plan/Execution/Iteration/Outputs分别提出了哪些新的要求？
 #### Plan 组件新要求
 ##### 业务理解能力
