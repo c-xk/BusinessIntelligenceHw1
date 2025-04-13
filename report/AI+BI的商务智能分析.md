@@ -109,7 +109,7 @@ class DictionaryManus(Manus):
         await cleanup_mongo_connections()
 ```
 #### 查询结果示例
-![[Pasted image 20250413152946.png]]
+![Pasted image 20250413152946](attachments/Pasted image 20250413152946.png)
 ## 问题五
 ### 1. 在AI结合BI的应用场景中，对OpenManus的四大组件：Plan/Execution/Iteration/Outputs分别提出了哪些新的要求？
 #### Plan 组件新要求
