@@ -105,21 +105,12 @@ class MCPSettings(BaseModel):
         "app.mcp.server", description="Module reference for the MCP server"
     )
 
-class DatabaseSettings(BaseModel):
-    host: str = Field(..., description="Database host")
-    port: int = Field(..., description="Database port")
-    user: str = Field(..., description="Database user")
-    password: str = Field(..., description="Database password")
-    database: str = Field(..., description="Database name")
-    charset: str = Field("utf8mb4", description="Database charset")
 
 class AppConfig(BaseModel):
     llm: Dict[str, LLMSettings]
     sandbox: Optional[SandboxSettings] = Field(
         None, description="Sandbox configuration"
     )
-    database: DatabaseSettings = Field(..., description="Database configuration")
-
     browser_config: Optional[BrowserSettings] = Field(
         None, description="Browser configuration"
     )
@@ -236,10 +227,6 @@ class Config:
         else:
             mcp_settings = MCPSettings()
 
-        # handle database config
-        database_config = raw_config.get("database", {})
-        database_settings = DatabaseSettings(**database_config)
-
         config_dict = {
             "llm": {
                 "default": default_settings,
@@ -252,7 +239,6 @@ class Config:
             "browser_config": browser_settings,
             "search_config": search_settings,
             "mcp_config": mcp_settings,
-            "database": database_settings,
         }
 
         self._config = AppConfig(**config_dict)
@@ -288,34 +274,5 @@ class Config:
         """Get the root path of the application"""
         return PROJECT_ROOT
 
-    @property
-    def database(self) -> Dict[str, DatabaseSettings]:
-        """Get all database configurations"""
-        database_configs = {}
-        raw_config = self._load_config()
-
-        # Handle default database configuration
-        default_db = raw_config.get("database", {})
-        if default_db:
-            database_configs["default"] = DatabaseSettings(**default_db)
-
-        # Handle other database configurations (if any)
-        databases = raw_config.get("databases", {})
-        for name, db_config in databases.items():
-            database_configs[name] = DatabaseSettings(**db_config)
-
-        return database_configs
-
-    def get_database_config(self, name: str = "default") -> Optional[DatabaseSettings]:
-        """
-        Get database configuration by name
-
-        Args:
-            name: Database configuration name, defaults to "default"
-
-        Returns:
-            DatabaseSettings or None (if configuration doesn't exist)
-        """
-        return self.database.get(name)
 
 config = Config()

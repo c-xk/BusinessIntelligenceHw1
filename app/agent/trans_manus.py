@@ -13,6 +13,7 @@ from app.tool.str_replace_editor import StrReplaceEditor
 from app.tool.translate import translate_text
 
 
+
 class Manus(ToolCallAgent):
     """A versatile general-purpose agent."""
 
