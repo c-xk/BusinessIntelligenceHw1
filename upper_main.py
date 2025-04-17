@@ -1,10 +1,11 @@
 import asyncio
-from app.agent.hello_manus import HelloManus  # 导入自定义代理类
+
+from app.agent.upper_manus import Manus
 from app.logger import logger
 
-async def main():
-    agent = HelloManus()  # 直接创建代理实例
 
+async def main():
+    agent = Manus()
     try:
         prompt = input("Enter your prompt: ")
         if not prompt.strip():
@@ -12,13 +13,14 @@ async def main():
             return
 
         logger.warning("Processing your request...")
-        result = await agent.run(prompt)  # 执行代理的 run 方法
-        print(result)  # 输出结果
+        await agent.run(prompt)
         logger.info("Request processing completed.")
     except KeyboardInterrupt:
         logger.warning("Operation interrupted.")
     finally:
+        # Ensure agent resources are cleaned up before exiting
         await agent.cleanup()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
