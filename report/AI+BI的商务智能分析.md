@@ -134,6 +134,159 @@ class DictionaryManus(Manus):
 
 ![Pasted image 20250413152946](attachments/Ass1.png)
 
+## 问题二
+
+### 1. 如何访问现有的BI分析服务（例如一段存储过程或者一个对外的分析API）
+
+#### 存储过程（Stored Procedure）
+
+- **定义**：存储过程是数据库层面的服务，通常用于封装复杂的业务逻辑。
+- **访问方式**：
+  - 通过数据库连接池（如 Java 中的 JDBC / MyBatis / Spring Data）执行存储过程。
+  - 示例（Java + MyBatis）：Mapper XML 配置调用
+    ```xml
+    <select id="callBIProcedure" statementType="CALLABLE">
+      {CALL analyze_data(#{param1, mode=IN}, #{result, mode=OUT})}
+    </select>
+    ```
+  - 或通过 SQL：
+    ```sql
+    CALL analyze_data('2023-01-01', @out_result);
+    SELECT @out_result;
+    ```
+
+#### 对外的分析 API（RESTful / GraphQL / SOAP）
+
+- **定义**：对外的分析 API 是通过网络提供数据分析能力的服务。
+- **访问方式**：
+  - 使用 HTTP 客户端调用：
+    - 前端：使用 `axios`。
+    - 后端：使用 `HttpClient` 或 `FeignClient`。
+  - 示例（Node.js + axios）：
+    ```javascript
+    const res = await axios.post('https://api.bi-service.com/analyze', {
+      param1: 'value1',
+      param2: 'value2',
+    });
+    ```
+
+### 2. 如何改造现有BI分析服务，使之适合OpenManus的框架？
+
+为了在 OpenManus 框架下接入并改造现有的 BI 分析服务，可以遵循如下思路：
+
+1. **访问层处理**
+   - 对于存储过程：配置数据源，采用 MyBatis 或 JDBC 进行调用。
+   - 对于外部 API：使用 Feign 或 RestTemplate 进行远程访问。
+
+2. **工具层统一封装**
+   - 对于Tools是基于OpenManus本身的BaseTool。
+   - 将返回结果转换为 OpenManus 标准的数据结构（例如 `Result`、`Page` 等）。
+
+3. **接口层与安全适配**
+   - 后端设计 RESTful 接口，集成 OpenManus 的认证和权限控制。
+   - 全局异常捕获与日志记录，以提高系统健壮性。
+
+### 3. 请改造和实现现有BI分析服务
+
+#### 改造目标
+
+- **统一接口**：基于BaseTool新写工具与OpenManus的其它工具格式统一。
+- **标准化输出**：将分析结果转换为 OpenManus 标准格式。
+- **增强安全性**：集成认证和权限控制，存储信息的确认。
+
+#### 示例实现
+
+对于一段存储过程，这里采用的是调用本地数据库来进行BI分析，以下是一个改造存储过程的示例代码：
+在config配置中添加有关数据库的基本信息同时仿照search工具添加数据库查询工具
+```python
+class DatabaseSettings(BaseModel):
+    host: str = Field(..., description="Database host")
+    port: int = Field(..., description="Database port")
+    user: str = Field(..., description="Database user")
+    password: str = Field(..., description="Database password")
+    database: str = Field(..., description="Database name")
+    charset: str = Field("utf8mb4", description="Database charset")
+
+class AppConfig(BaseModel):
+    llm: Dict[str, LLMSettings]
+    sandbox: Optional[SandboxSettings] = Field(
+        None, description="Sandbox configuration"
+    )
+    database: DatabaseSettings = Field(..., description="Database configuration")
+    browser_config: Optional[BrowserSettings] = Field(
+        None, description="Browser configuration"
+    )
+    search_config: Optional[SearchSettings] = Field(
+        None, description="Search configuration"
+    )
+    mcp_config: Optional[MCPSettings] = Field(None, description="MCP configuration")
+
+    class Config:
+        arbitrary_types_allowed = True
+```
+添加有关数据库的方法并添加@property设置为只读属性
+```python
+    @property
+    def database(self) -> Dict[str, DatabaseSettings]:
+        """Get all database configurations"""
+        database_configs = {}
+        raw_config = self._load_config()
+
+        # Handle default database configuration
+        default_db = raw_config.get("database", {})
+        if default_db:
+            database_configs["default"] = DatabaseSettings(**default_db)
+
+        # Handle other database configurations (if any)
+        databases = raw_config.get("databases", {})
+        for name, db_config in databases.items():
+            database_configs[name] = DatabaseSettings(**db_config)
+
+        return database_configs
+
+    def get_database_config(self, name: str = "default") -> Optional[DatabaseSettings]:
+        """
+        Get database configuration by name
+
+        Args:
+            name: Database configuration name, defaults to "default"
+
+        Returns:
+            DatabaseSettings or None (if configuration doesn't exist)
+        """
+        return self.database.get(name)
+
+```
+在manus.py中添加自己写的数据库查询工具以调用
+```python
+from app.tool.bIdata import MySQLQueryTool
+......
+    available_tools: ToolCollection = Field(
+        default_factory=lambda: ToolCollection(
+            PythonExecute(), BrowserUseTool(), StrReplaceEditor(), Terminate(),MySQLQueryTool()
+        )
+    )
+```
+在tool文件夹中新建bIdata.py添加数据库查询工具，具体方法仿照search_tools
+```python
+class MySQLQueryTool(BaseTool):
+    ...
+    async def execute(
+            self,
+            action: str,
+            query: Optional[str] = None,
+            params: Optional[List[str]] = None,
+            table_name: Optional[str] = None,
+            database_name: Optional[str] = None,
+            **kwargs,
+    ) -> ToolResult:
+    ...
+```
+#### 结果示例
+提问：查询数据库中大于9.0评分的电影上映的时间区间如何
+![图片](attachments/Assignment2.png)
+
+
 ## 问题三
 
 ### 1. 在 OpenManus 中，Initial Plan 获取时，对应的输入和输出分别是什么？请举例说明
